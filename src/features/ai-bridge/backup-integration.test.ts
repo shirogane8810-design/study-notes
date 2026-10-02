@@ -1,0 +1,10 @@
+import {it,expect} from 'vitest';
+import {PDFDocument} from 'pdf-lib';
+import {StudyDatabase} from '../../db/database';
+import {importResponse,type AiResponse} from './bridge';
+import {snapshot,createArchive,readArchive} from '../backup/archive';
+import {restore} from '../backup/restore';
+import {saveExams,setPageChecked} from '../home/repository';
+import {assessChoice} from '../review/choices';
+import type {PdfDoc} from '../../db/models';
+it('試験・確認済み・AI要約・4択の根拠をZIPのマージで保つ',async()=>{const d=new StudyDatabase(crypto.randomUUID());const at=new Date().toISOString();await d.subjects.add({id:'s',name:'確認',icon:'📘',color:'#2563eb',order:0,exams:[],createdAt:at});await d.notes.add({id:'n',subjectId:'s',title:'授業',sessionNumber:1,order:0,createdAt:at,updatedAt:at});const pdf=await PDFDocument.create();pdf.addPage();const bytes=await pdf.save();const doc:PdfDoc={id:'p',noteId:'n',fileName:'資料.pdf',blob:new Blob([new Uint8Array(bytes)]),pages:[{kind:'pdf',srcPage:1}],extractedText:[]};await d.pdfDocs.add(doc);await saveExams('s',[{name:'期末',date:'2026-11-01'}],d);await setPageChecked({pdfDocId:'p',pageKey:'pdf:1',pageIndex:0},true,d);const response:AiResponse={summary:{points:['要点1','要点2','要点3'],terms:['用語']},questions:[{kind:'mcq',question:'問題',choices:['A','B','C','D'],answer:'B',explanation:'解説',sourcePage:1}]};await importResponse('n',response,doc,1,1,d);const archive=await readArchive(await createArchive(await snapshot(undefined,d),()=>{},async()=>bytes));await restore(archive,'merge',d);const copy=(await d.cards.toArray()).find(c=>c.pdfDocId!=='p')!;expect(assessChoice(copy,'B')).toBe(true);expect(copy.sourcePageKey).toBe('pdf:1');expect((await d.pageChecks.where('pdfDocId').equals(copy.pdfDocId!).first())?.pageIndex).toBe(0);expect(await d.aiSummaries.count()).toBe(2);expect((await d.subjects.toArray()).every(s=>s.exams[0].name==='期末')).toBe(true);await d.delete();});

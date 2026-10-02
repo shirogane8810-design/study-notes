@@ -1,0 +1,9 @@
+import {useEffect,useRef,useState} from 'react';
+import type {PDFDocumentProxy,RenderTask} from 'pdfjs-dist';
+import {loadPdf} from './pdf-engine';
+export function ExportPreview({bytes,onClose}:{bytes:Uint8Array;onClose:()=>void}){
+  const [pdf,setPdf]=useState<PDFDocumentProxy>(),[page,setPage]=useState(1),[error,setError]=useState('');const canvas=useRef<HTMLCanvasElement>(null);
+  useEffect(()=>{let disposed=false;const task=loadPdf(new Uint8Array(bytes));void task.promise.then(p=>{if(!disposed)setPdf(p);}).catch(()=>{if(!disposed)setError('出力PDFを表示できませんでした。');});return()=>{disposed=true;void task.destroy();};},[bytes]);
+  useEffect(()=>{if(!pdf||!canvas.current)return;let disposed=false;let task:RenderTask|undefined;const target=canvas.current;void(async()=>{try{const p=await pdf.getPage(page);if(disposed)return;const v=p.getViewport({scale:1});const view=p.getViewport({scale:Math.min(1.5,900/v.width)});target.width=Math.ceil(view.width);target.height=Math.ceil(view.height);task=p.render({canvas:target,viewport:view});await task.promise;}catch(e){if(!disposed&&!(e instanceof Error&&e.name==='RenderingCancelledException'))setError('ページを表示できませんでした。');}})();return()=>{disposed=true;task?.cancel();};},[pdf,page]);
+  return <div className="export-preview" role="dialog" aria-label="出力PDFの確認"><div className="export-preview-content"><div className="export-preview-controls"><strong>出力PDFの確認</strong><button disabled={page<=1} onClick={()=>setPage(p=>p-1)} aria-label="出力PDFの前のページ">‹</button><span>{page} / {pdf?.numPages??'…'}</span><button disabled={!pdf||page>=pdf.numPages} onClick={()=>setPage(p=>p+1)} aria-label="出力PDFの次のページ">›</button><button onClick={onClose}>確認を閉じる</button></div>{error&&<p role="alert">{error}</p>}<div className="export-preview-page"><canvas ref={canvas} aria-label={`出力PDF ${page}ページ`}/></div></div></div>;
+}

@@ -1,0 +1,6 @@
+import {db,type StudyDatabase} from '../../db/database';
+import type {Exam} from '../../db/models';
+import {calendarDays} from './dashboard';
+import {resolvePage,type PageTarget} from '../notes/page-links';
+export async function saveExams(subjectId:string,exams:Exam[],database:StudyDatabase=db){const clean=exams.map(e=>({name:e.name.trim(),date:e.date}));if(clean.some(e=>!e.name||e.name.length>100||!Number.isFinite(calendarDays(e.date))))throw new Error('試験名と正しい日付を入力してください。');await database.transaction('rw',database.subjects,async()=>{if(!await database.subjects.get(subjectId))throw new Error('科目が見つかりません。');await database.subjects.update(subjectId,{exams:clean});});}
+export async function setPageChecked(target:PageTarget,checked:boolean,database:StudyDatabase=db){await database.transaction('rw',database.pdfDocs,database.pageChecks,async()=>{const doc=await database.pdfDocs.get(target.pdfDocId);const index=doc?resolvePage(doc,target):-1;if(index<0)throw new Error('ページが見つかりません。');const existing=await database.pageChecks.where('[pdfDocId+pageIndex]').equals([target.pdfDocId,index]).first();if(checked){if(!existing)await database.pageChecks.add({id:crypto.randomUUID(),pdfDocId:target.pdfDocId,pageIndex:index,checkedAt:new Date().toISOString()});}else if(existing)await database.pageChecks.delete(existing.id);});}

@@ -27,9 +27,16 @@ export function App(){
   const [selected,setSelected]=useState<string>();const [opened,setOpened]=useState<string>();
   const [editor,setEditor]=useState<Editor>();const [error,setError]=useState('');const [busy,setBusy]=useState(false);
   const [menu,setMenu]=useState(false);const [offline,setOffline]=useState(!navigator.onLine);const [update,setUpdate]=useState(false);
+  const [windowWidth,setWindowWidth]=useState(window.innerWidth);
+  const [sidebarCollapsed,setSidebarCollapsed]=useState(()=>{try{return localStorage.getItem('study-notes-sidebar-collapsed')==='true';}catch{return false;}});
   const drag=useRef<string|undefined>(undefined);const modal=useRef<HTMLDialogElement>(null);const lastFocus=useRef<HTMLElement|null>(null);
   const subject=subjects?.find(s=>s.id===selected);const notes=(allNotes??[]).filter(n=>n.subjectId===selected).sort((a,b)=>a.order-b.order);
   const activeNote=notes.find(n=>n.id===opened);
+  const overlayMenu=windowWidth<=760||!!activeNote&&windowWidth<=1100;
+  const sidebarVisible=overlayMenu?menu:!sidebarCollapsed;
+  function closeSidebar(){if(overlayMenu)setMenu(false);else setSidebarCollapsed(true);}
+  useEffect(()=>{const resize=()=>setWindowWidth(window.innerWidth);window.addEventListener('resize',resize);return()=>window.removeEventListener('resize',resize);},[]);
+  useEffect(()=>{try{localStorage.setItem('study-notes-sidebar-collapsed',String(sidebarCollapsed));}catch{/* 表示切替は保存不可でも使える */}},[sidebarCollapsed]);
   useEffect(()=>{document.documentElement.dataset.theme=settings?.theme??'light';},[settings?.theme]);
   useEffect(()=>{const on=()=>setOffline(!navigator.onLine);const changed=()=>setUpdate(true);window.addEventListener('online',on);window.addEventListener('offline',on);window.addEventListener('app-update',changed);return()=>{window.removeEventListener('online',on);window.removeEventListener('offline',on);window.removeEventListener('app-update',changed);};},[]);
   useEffect(()=>{if(editor){lastFocus.current=document.activeElement as HTMLElement;modal.current?.showModal();}else{modal.current?.close();lastFocus.current?.focus();}},[editor]);
@@ -39,10 +46,10 @@ export function App(){
   async function openLinkedNote(note:Note,target?:PageTarget){try{await flushAllStrokes();await openNote(note);setSelected(note.subjectId);setPageRequest(target?{...target,requestId:crypto.randomUUID()}:undefined);setMenu(false);}catch{setError('書き込みを保存できませんでした。');}}
   async function move(id:string,target:string){const ids=notes.map(n=>n.id);ids.splice(ids.indexOf(id),1);ids.splice(ids.indexOf(target),0,id);await run(()=>reorderNotes(selected!,ids));}
   async function submit(event:FormEvent<HTMLFormElement>){event.preventDefault();const form=new FormData(event.currentTarget);if(editor?.kind==='subject'){await run(async()=>{const id=await saveSubject({id:editor.value?.id,name:String(form.get('name')),icon:String(form.get('icon')),color:String(form.get('color'))});setSelected(id);setOpened(undefined);});}else if(editor?.kind==='note'&&selected){await run(()=>saveNote({id:editor.value?.id,subjectId:selected,title:String(form.get('title')),sessionNumber:Number(form.get('sessionNumber')),date:String(form.get('date'))||undefined}));}}
-  return <div className={`app${activeNote?' pdf-open':''}`}>
-    {menu&&<button className="scrim" aria-label="メニューを閉じる" onClick={()=>setMenu(false)}/>}
-    <aside className={menu?'sidebar show':'sidebar'}>
-      <div className="brand"><span className="brand-mark">▤</span><strong>学習ノート</strong><button className="mobile-close icon-button" aria-label="メニューを閉じる" onClick={()=>setMenu(false)}>×</button></div>
+  return <div className={`app${activeNote?' pdf-open':''}${!overlayMenu&&sidebarCollapsed?' sidebar-collapsed':''}`}>
+    {overlayMenu&&menu&&<button className="scrim" aria-label="メニューを閉じる" onClick={()=>setMenu(false)}/>}
+    <aside id="subject-sidebar" aria-label="科目メニュー" inert={!sidebarVisible} className={menu?'sidebar show':'sidebar'}>
+      <div className="brand"><span className="brand-mark">▤</span><strong>学習ノート</strong><button className="mobile-close icon-button" aria-label="科目メニューを閉じる" onClick={closeSidebar}>×</button></div>
       <button className={`nav-home ${!selected?'selected':''}`} onClick={()=>pick()}>⌂ <span>学習ホーム</span><span className="count">{allNotes?.length??0}</span></button>
       <SearchPanel onOpen={(note,hit)=>{void flushAllStrokes().then(()=>{setSelected(note.subjectId);setOpened(note.id);setPageRequest(hit.target?{...hit.target,requestId:crypto.randomUUID()}:undefined);setMenu(false);}).catch(()=>setError('書き込みを保存できませんでした。'));}}/>
       <ReviewPanel request={reviewRequest} onOpen={(note,target)=>void openLinkedNote(note,target)}/>
@@ -54,7 +61,7 @@ export function App(){
       <div className="sidebar-footer"><div className="local-info"><span>◉</span><div>このブラウザに保存<small>{offline?'オフラインで利用中':'データは外部に送信しません'}</small></div></div><button className="theme-button" onClick={()=>run(()=>db.settings.put({id:'main',maskColor:settings?.maskColor??'#ef4444',promptTemplate:settings?.promptTemplate??'',penPresets:settings?.penPresets??[],lastExportAt:settings?.lastExportAt,theme:settings?.theme==='dark'?'light':'dark'}))}>{settings?.theme==='dark'?'☀ ライトモード':'☾ ダークモード'}</button></div>
     </aside>
     <main>
-      <header className="topbar"><button className="mobile-toggle icon-button" aria-label="科目メニューを開く" onClick={()=>setMenu(true)}>☰</button><div className="breadcrumb"><button onClick={()=>pick()}>学習ノート</button><span>/</span><span>{subject?.name??'ノート一覧'}</span>{activeNote&&<><span>/</span><span className="truncate">第{activeNote.sessionNumber}回</span></>}</div><span className="storage-label">{offline?'オフライン':'ブラウザ内保存'}</span></header>
+      <header className="topbar"><button className="mobile-toggle icon-button" aria-label={sidebarVisible?'科目メニューを隠す':'科目メニューを開く'} aria-expanded={sidebarVisible} aria-controls="subject-sidebar" onClick={()=>{if(overlayMenu)setMenu(v=>!v);else setSidebarCollapsed(v=>!v);}}>☰</button><div className="breadcrumb"><button onClick={()=>pick()}>学習ノート</button><span>/</span><span>{subject?.name??'ノート一覧'}</span>{activeNote&&<><span>/</span><span className="truncate">第{activeNote.sessionNumber}回</span></>}</div><span className="storage-label">{offline?'オフライン':'ブラウザ内保存'}</span></header>
       <div className={activeNote?"content editing-pdf":"content"} style={{'--accent':subject?.color??'#2563eb'} as CSSProperties}>
         {error&&<div role="alert" className="error">{error}<button onClick={()=>setError('')}>閉じる</button></div>}
         {update&&<div className="notice">新しいバージョンがあります。入力を終えてから再読み込みしてください。<button onClick={()=>void flushAllStrokes().then(()=>applyUpdate(true)).catch(()=>setError('書き込みを保存できませんでした。更新を中止しました。'))}>再読み込み</button></div>}

@@ -124,3 +124,10 @@ Settings  { maskColor, promptTemplate, lastExportAt, penPresets }
 - あいまいな点は妥当な判断をして進め、READMEの「設計上の判断」に記録する。
 
 
+
+
+## 実装完了後の運用（利用者の最新指示）
+
+全8段階の実装済み。利用者の希望で赤シートは省略し、第7・8段階は並行して実装した。
+以後はこのリポジトリで改善し、その都度GitHub Pagesへデプロイする。変更後はnpm testとnpm run buildを確認し、mainへコミット・pushしてActionsのデプロイ成功と公開画面を確認する。GitHub Pagesは https://shirogane8810-design.github.io/study-notes/ 。
+IndexedDBの学習データ・個人PDF・バックアップZIP・検証スクリーンショットをリポジトリへ入れない。既存のブラウザデータは維持する。

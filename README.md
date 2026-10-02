@@ -1,5 +1,9 @@
 # 学習ノート
 
+公開URL：https://shirogane8810-design.github.io/study-notes/
+
+リポジトリ：https://github.com/shirogane8810-design/study-notes
+
 自分専用の学習ノートPWA。科目 → 授業回 → PDF＋テキストノートの構成で、8段階の順序を維持して開発します。
 
 ## 実装状況

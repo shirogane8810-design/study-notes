@@ -18,6 +18,7 @@ import {pageKey,resolvePage,type PageTarget} from '../notes/page-links';
 import type {PageRequest} from '../notes/LessonWorkspace';
 import {isTwoFingerTap,movedFrom} from './fullscreen-gesture';
 import {SearchHighlights} from '../search/SearchHighlights';
+import {imageFormat,imageToPdf,materialAccept} from './image-import';
 export function PdfWorkspace({noteId,request,onPageChange,immersive=false,onFullscreen,title}:{immersive?:boolean;onFullscreen?:()=>void;title?:string;noteId:string;request?:PageRequest;onPageChange?:(page:PageTarget)=>void}){
   const docs=useLiveQuery(()=>db.pdfDocs.where('noteId').equals(noteId).toArray(),[noteId]);
   const [selected,setSelected]=useState<string>();const [importing,setImporting]=useState(false);const [error,setError]=useState('');const [dropping,setDropping]=useState(false);
@@ -26,21 +27,23 @@ export function PdfWorkspace({noteId,request,onPageChange,immersive=false,onFull
   useEffect(()=>{if(!request||!docs||lastRequest.current===request.requestId)return;const target=docs.find(d=>d.id===request.pdfDocId);if(!target)return;const index=resolvePage(target,request);if(index<0){setError('リンク先のページが見つかりません。');return;}lastRequest.current=request.requestId;void flushAllStrokes().then(()=>{setInitialPage(index);setSelected(target.id);setPendingRequest(request);}).catch(()=>setError('書き込みを保存できませんでした。'));},[request,docs]);
   async function importFile(file?:File){
     if(!file||importing)return;setError('');setImporting(true);let task:ReturnType<typeof loadPdf>|undefined;
-    try{if(file.size>100*1024*1024)throw new Error('PDFは100MB以下のファイルを選んでください。');if(!(await file.slice(0,1024).text()).includes('%PDF-'))throw new Error('PDFファイルを選んでください。');
-      const bytes=new Uint8Array(await file.arrayBuffer());task=loadPdf(bytes);task.onPassword=()=>{void task?.destroy();};let pdf:PDFDocumentProxy;
+    try{if(file.size>100*1024*1024)throw new Error('資料は100MB以下のファイルを選んでください。');const header=new Uint8Array(await file.slice(0,1024).arrayBuffer());
+      const isImage=!!imageFormat(header);if(!isImage&&!new TextDecoder().decode(header).includes('%PDF-'))throw new Error('PDF・PNG・JPEG・WebPファイルを選んでください。');
+      const blob=isImage?await imageToPdf(file):file;
+      const bytes=new Uint8Array(await blob.arrayBuffer());task=loadPdf(bytes);task.onPassword=()=>{void task?.destroy();};let pdf:PDFDocumentProxy;
       try{pdf=await task.promise;}catch{throw new Error('PDFを開けません。破損していない、パスワードのないPDFを選んでください。');}
-      const id=crypto.randomUUID();const item:PdfDoc={id,noteId,fileName:file.name,blob:file,pages:Array.from({length:pdf.numPages},(_,i)=>({kind:'pdf',srcPage:i+1})),extractedText:[]};
+      const id=crypto.randomUUID();const item:PdfDoc={id,noteId,fileName:file.name,blob,pages:Array.from({length:pdf.numPages},(_,i)=>({kind:'pdf',srcPage:i+1})),extractedText:[]};
       await flushAllStrokes();await db.transaction('rw',db.notes,db.pdfDocs,async()=>{if(!await db.notes.get(noteId))throw new Error('授業が見つかりません。');await db.pdfDocs.add(item);await db.notes.update(noteId,{updatedAt:new Date().toISOString()});});setInitialPage(0);setSelected(id);
-    }catch(e){setError(e instanceof Error?e.message:'PDFを保存できませんでした。ブラウザの空き容量を確認してください。');}finally{await task?.destroy().catch(()=>{});setImporting(false);if(fileInput.current)fileInput.current.value='';}
+    }catch(e){setError(e instanceof Error?e.message:'資料を保存できませんでした。ブラウザの空き容量を確認してください。');}finally{await task?.destroy().catch(()=>{});setImporting(false);if(fileInput.current)fileInput.current.value='';}
   }
   return <div className={`pdf-workspace ${dropping?'drop-active':''}`} onDragOver={e=>{if(e.dataTransfer.types.includes('Files')){e.preventDefault();setDropping(true);}}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))setDropping(false);}} onDrop={e=>{e.preventDefault();setDropping(false);void importFile(e.dataTransfer.files[0]);}}>
-    <input type="file" accept="application/pdf,.pdf" ref={fileInput} className="file-input" aria-label="PDFファイル" onChange={e=>void importFile(e.target.files?.[0])}/>
+    <input type="file" accept={materialAccept} ref={fileInput} className="file-input" aria-label="PDF・画像ファイル" onChange={e=>void importFile(e.target.files?.[0])}/>
     {error&&<div role="alert" className="error">{error}<button onClick={()=>setError('')}>閉じる</button></div>}
-    {importing&&<div role="status" className="pdf-loading">PDFを確認して保存しています…</div>}
+    {importing&&<div role="status" className="pdf-loading">資料を確認して保存しています…</div>}
     {!docs?<p className="pdf-loading">PDFを読み込んでいます…</p>:current?<>
-      <div className="pdf-filebar"><label>{immersive&&<strong>{title}</strong>}資料<select aria-label="PDF資料を選択" value={current.id} disabled={importing} onChange={e=>{const id=e.target.value;void flushAllStrokes().then(()=>{setInitialPage(0);setSelected(id);}).catch(()=>setError('書き込みを保存できませんでした。資料の切り替えを中止しました。'));}}>{docs.map(d=><option key={d.id} value={d.id}>{d.fileName}</option>)}</select></label><button className="secondary" disabled={importing} onClick={()=>fileInput.current?.click()}>＋ PDFを追加</button>{!immersive&&<button onClick={onFullscreen}>⛶ フルスクリーンで表示</button>}</div>
+      <div className="pdf-filebar"><label>{immersive&&<strong>{title}</strong>}資料<select aria-label="PDF資料を選択" value={current.id} disabled={importing} onChange={e=>{const id=e.target.value;void flushAllStrokes().then(()=>{setInitialPage(0);setSelected(id);}).catch(()=>setError('書き込みを保存できませんでした。資料の切り替えを中止しました。'));}}>{docs.map(d=><option key={d.id} value={d.id}>{d.fileName}</option>)}</select></label><button className="secondary" disabled={importing} onClick={()=>fileInput.current?.click()}>＋ PDF・画像を追加</button>{!immersive&&<button onClick={onFullscreen}>⛶ フルスクリーンで表示</button>}</div>
       <PdfEditor onFullscreen={immersive?undefined:onFullscreen} key={`${current.id}:${current.pages.length}`} doc={current} initialPage={initialPage} onInsert={setInitialPage} request={pendingRequest} onRequestDone={()=>setPendingRequest(undefined)} onPageChange={onPageChange}/>
-    </>:<div className="pdf-import-empty"><span>▤</span><h3>授業のPDFを取り込む</h3><p>PDFをここにドラッグするか、ファイルを選んでください。</p><button className="primary" disabled={importing} onClick={()=>fileInput.current?.click()}>PDFを選ぶ</button><small>100MBまで · ファイルはこのブラウザ内に保存されます</small></div>}
+    </>:<div className="pdf-import-empty"><span>▤</span><h3>授業のPDF・画像を取り込む</h3><p>PDFや画像をここにドラッグするか、ファイルを選んでください。</p><button className="primary" disabled={importing} onClick={()=>fileInput.current?.click()}>PDF・画像を選ぶ</button><small>PDF・PNG・JPEG・WebP · 100MBまで · このブラウザ内に保存されます</small></div>}
   </div>;
 }
 const emptyStrokes:Stroke[]=[];

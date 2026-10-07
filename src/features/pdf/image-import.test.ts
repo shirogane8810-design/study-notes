@@ -31,13 +31,13 @@ it('画像名の資料と書き込みをZIPから復元し、既存の資料を�
     const png=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII='),c=>c.charCodeAt(0)),blob=await imagePdf(png,1600,900);
     await source.subjects.put({id:'s',name:'画像のテスト',icon:'📘',color:'#2563eb',order:0,exams:[],createdAt:'2026-10-07'});
     await source.notes.put({id:'n',subjectId:'s',title:'画像',sessionNumber:1,order:0,createdAt:'2026-10-07',updatedAt:'2026-10-07'});
-    await source.pdfDocs.put({id:'image',noteId:'n',fileName:'画像.png',blob,pages:[{kind:'pdf',srcPage:1}],extractedText:[]});
+    await source.pdfDocs.put({id:'image',noteId:'n',fileName:'画像.png',blob,order:2,trashedAt:'2026-10-07T00:00:00Z',pages:[{kind:'pdf',srcPage:1}],extractedText:[]});
     await source.textBoxes.put({id:'text',pdfDocId:'image',pageIndex:0,x:.1,y:.2,width:.2,height:.1,text:'回答',color:'#2563eb',fontSize:.03});
     await dest.pdfDocs.put({id:'existing',noteId:'other',fileName:'保持.pdf',blob,pages:[{kind:'pdf',srcPage:1}],extractedText:[]});
     const backup=await readArchive(await createArchive(await snapshot(undefined,source),()=>{},async doc=>new Uint8Array(await doc.blob.arrayBuffer())));
     await restore(backup,'merge',dest);
     const image=(await dest.pdfDocs.toArray()).find(d=>d.fileName==='画像.png')!;
-    expect(image.pages).toEqual([{kind:'pdf',srcPage:1}]);expect(await image.blob.arrayBuffer()).toEqual(await blob.arrayBuffer());
+    expect(image.order).toBe(2);expect(image.trashedAt).toBe('2026-10-07T00:00:00Z');expect(image.pages).toEqual([{kind:'pdf',srcPage:1}]);expect(await image.blob.arrayBuffer()).toEqual(await blob.arrayBuffer());
     expect((await dest.textBoxes.toArray())[0]).toMatchObject({pdfDocId:image.id,text:'回答'});
     expect((await dest.pdfDocs.get('existing'))?.fileName).toBe('保持.pdf');
   }finally{await source.delete();await dest.delete();}

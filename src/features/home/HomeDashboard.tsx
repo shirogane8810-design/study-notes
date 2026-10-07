@@ -8,7 +8,7 @@ import {calendarDays,recallStats,reviewStreak,uncheckedPages} from './dashboard'
 import {saveExams,setPageChecked} from './repository';
 import './home.css';
 export default function HomeDashboard({onOpen,onReview}:{onOpen:(note:Note,target?:PageTarget)=>void;onReview:(subjectId?:string)=>void}){
-  const data=useLiveQuery(async()=>{const [subjects,notes,cards,logs,docs,strokes,texts,checks]=await Promise.all([db.subjects.orderBy('order').toArray(),db.notes.toArray(),db.cards.toArray(),db.reviewLogs.toArray(),db.pdfDocs.toArray(),db.strokes.toArray(),db.textNotes.toArray(),db.pageChecks.toArray()]);return {subjects,notes,cards,logs,docs,strokes,texts,checks};});
+  const data=useLiveQuery(async()=>{const [subjects,notes,cards,logs,docs,strokes,texts,checks]=await Promise.all([db.subjects.orderBy('order').toArray(),db.notes.toArray(),db.cards.toArray(),db.reviewLogs.toArray(),db.pdfDocs.filter(d=>!d.trashedAt).toArray(),db.strokes.toArray(),db.textNotes.toArray(),db.pageChecks.toArray()]);return {subjects,notes,cards,logs,docs,strokes,texts,checks};});
   const [pageLimit,setPageLimit]=useState(5);
   const [now,setNow]=useState(Date.now()),[editing,setEditing]=useState<Subject>(),[exams,setExams]=useState<Exam[]>([]),[error,setError]=useState(''),[busy,setBusy]=useState(false),[showChecked,setShowChecked]=useState(false);const dialog=useRef<HTMLDialogElement>(null);
   useEffect(()=>{const id=window.setInterval(()=>setNow(Date.now()),60000);return()=>window.clearInterval(id);},[]);

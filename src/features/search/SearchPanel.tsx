@@ -5,7 +5,7 @@ import type {Note} from '../../db/models';
 import {findNotes,type SearchHit} from './search';
 import {indexPdf} from './pdf-index';
 export function SearchPanel({onOpen}:{onOpen:(note:Note,hit:SearchHit)=>void}){
-  const docs=useLiveQuery(()=>db.pdfDocs.toArray())??[];const notes=useLiveQuery(()=>db.notes.toArray())??[];const texts=useLiveQuery(()=>db.textNotes.toArray())??[];const subjects=useLiveQuery(()=>db.subjects.toArray())??[];
+  const docs=useLiveQuery(()=>db.pdfDocs.filter(d=>!d.trashedAt).toArray())??[];const notes=useLiveQuery(()=>db.notes.toArray())??[];const texts=useLiveQuery(()=>db.textNotes.toArray())??[];const subjects=useLiveQuery(()=>db.subjects.toArray())??[];
   const [open,setOpen]=useState(false),[query,setQuery]=useState(''),[progress,setProgress]=useState(''),[error,setError]=useState(''),[limit,setLimit]=useState(50),[retry,setRetry]=useState(0);
   const dialog=useRef<HTMLDialogElement>(null);const jobs=useRef(false);const latest=useRef(docs);latest.current=docs;const signature=docs.filter(d=>!d.textIndexed).map(d=>d.id).join(',');
   useEffect(()=>{if(jobs.current)return;const pending=latest.current.filter(d=>!d.textIndexed);if(!pending.length)return;jobs.current=true;let succeeded=false;void(async()=>{try{for(const doc of pending)await indexPdf(doc,setProgress);setProgress('');setError('');succeeded=true;}catch{setError('PDFの文字を読み込めませんでした。検索できる範囲の結果を表示しています。');setProgress('');}finally{jobs.current=false;if(succeeded&&latest.current.some(d=>!d.textIndexed&&!pending.some(p=>p.id===d.id)))setRetry(v=>v+1);}})();},[signature,retry]);

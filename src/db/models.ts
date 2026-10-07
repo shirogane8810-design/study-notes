@@ -11,4 +11,4 @@ export interface AiSummary { id:string;noteId:string;points:string[];terms:strin
 export interface PageCheck { id:string;pdfDocId:string;pageIndex:number;checkedAt:string }
 export interface Settings { id:string;maskColor:string;promptTemplate:string;lastExportAt?:string;penPresets:{color:string;width:number}[];theme:'light'|'dark' }
 
-export interface TextBox { id:string;pdfDocId:string;pageIndex:number;x:number;y:number;width:number;height:number;text:string;color:string;fontSize:number }
+export interface TextBox { kind?:'answer';id:string;pdfDocId:string;pageIndex:number;x:number;y:number;width:number;height:number;text:string;color:string;fontSize:number }

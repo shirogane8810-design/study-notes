@@ -5,7 +5,8 @@ import {paint} from './InkPage';
 import {paperLines} from './pages';
 function png(canvas:HTMLCanvasElement):Promise<Uint8Array>{return new Promise((resolve,reject)=>canvas.toBlob(blob=>{if(!blob)reject(new Error('書き込み画像を作れませんでした。'));else void blob.arrayBuffer().then(bytes=>resolve(new Uint8Array(bytes)),reject);},'image/png'));}
 function drawText(ctx:CanvasRenderingContext2D,box:TextBox,width:number,height:number){
-  const font=box.fontSize*width,padding=12*width/595;ctx.save();ctx.beginPath();ctx.rect(box.x*width,box.y*height,box.width*width,box.height*height);ctx.clip();ctx.font=`${font}px system-ui,sans-serif`;ctx.fillStyle=box.color;ctx.textBaseline='top';
+  const font=box.fontSize*width,padding=box.kind==='answer'?0:12*width/595;ctx.save();ctx.beginPath();ctx.rect(box.x*width,box.y*height,box.width*width,box.height*height);ctx.clip();ctx.font=`${font}px system-ui,sans-serif`;ctx.fillStyle=box.color;ctx.textBaseline='top';
+  if(box.kind==='answer'){ctx.fillText(box.text,box.x*width,box.y*height);ctx.restore();return;}
   const max=box.width*width-2*padding;let y=box.y*height+padding;
   for(const paragraph of box.text.split('\n')){let line='';for(const char of paragraph){if(line&&ctx.measureText(line+char).width>max){ctx.fillText(line,box.x*width+padding,y);y+=font*1.45;line=char;}else line+=char;}ctx.fillText(line,box.x*width+padding,y);y+=font*1.45;}
   ctx.restore();

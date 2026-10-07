@@ -13,6 +13,7 @@ async function fixture(){
   await database.pdfDocs.put({id:'p',noteId:'n',fileName:'資料.pdf',blob:new Blob([new Uint8Array(bytes)]),pages:[{kind:'grid',id:'g'},{kind:'pdf',srcPage:1}],textIndexed:true,extractedText:[{page:1,text:'一次関数'}]});
   await database.strokes.put({id:'stroke',pdfDocId:'p',pageIndex:1,tool:'pen',color:'#172033',width:.01,points:[[.1,.2,.5]]});
   await database.textBoxes.put({id:'box',pdfDocId:'p',pageIndex:1,x:.1,y:.2,width:.3,height:.2,text:'注釈',color:'#172033',fontSize:.03});
+  await database.textBoxes.put({id:'answer',kind:'answer',pdfDocId:'p',pageIndex:1,x:.4,y:.3,width:.15,height:.03,text:'政策手段',color:'#2563eb',fontSize:18/595});
   await database.textNotes.put({id:'t',noteId:'n',content:{type:'doc',content:[{type:'paragraph',content:[{type:'text',text:'要点'},{type:'pageLink',attrs:{pdfDocId:'p',pageKey:'pdf:1',pageIndex:1,label:'p.2'}}]}]},plainText:'要点p.2'});
   await database.cards.put({id:'c',noteId:'n',kind:'mask',pdfDocId:'p',pageIndex:1,strokeIds:['stroke'],fsrs:{due:'2026-10-03'},createdAt:'2026-10-02'});
   await database.reviewLogs.put({id:'r',cardId:'c',rating:3,reviewedAt:'2026-10-02'});await database.pageChecks.put({id:'check',pdfDocId:'p',pageIndex:1,checkedAt:'2026-10-02'});

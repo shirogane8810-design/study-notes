@@ -4,3 +4,4 @@
 /* PCでもメニューを折りたたみ、本文の幅を広げる。 */
 .mobile-toggle,.mobile-close{display:inline-grid}.mobile-close{margin-left:auto}.brand{padding-left:0;padding-right:0;gap:8px}.brand strong{white-space:nowrap}.topbar{justify-content:flex-start}.storage-label{margin-left:auto}
 .sidebar-collapsed>.sidebar{position:fixed;left:0;top:0;transform:translateX(-100%)}
+.app-updates{padding:10px 12px;border-top:1px solid var(--line);font-size:12px}.app-updates small{font-size:11px;line-height:1.6}.app-updates button{display:block;min-height:44px;padding:6px 8px;font-size:12px;color:var(--accent);text-align:left}.app-updates p{color:var(--muted);font-size:11px;line-height:1.6;overflow-wrap:anywhere}.app-updates .build-id{display:block;font-size:10px}.app-update-notice{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.app-update-notice span{flex:1;min-width:180px}.app-update-notice button{white-space:nowrap}

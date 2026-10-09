@@ -4,7 +4,7 @@ import { db } from './db/database';
 import type {PageTarget} from './features/notes/page-links';
 import type { Note,Subject } from './db/models';
 import {saveSubject,saveNote,deleteSubject,deleteNote,reorderNotes} from './features/notes/repository';
-import { applyUpdate } from './sw';
+import {UpdatePanel,UpdateNotice} from './features/updates/UpdatePanel';
 import {LessonWorkspace,type PageRequest} from './features/notes/LessonWorkspace';
 import {dueAt} from './features/review/scheduler';
 import {formatDue} from './features/review/CardManager';
@@ -26,7 +26,7 @@ export function App(){
   const [pageRequest,setPageRequest]=useState<PageRequest>();
   const [selected,setSelected]=useState<string>();const [opened,setOpened]=useState<string>();
   const [editor,setEditor]=useState<Editor>();const [error,setError]=useState('');const [busy,setBusy]=useState(false);
-  const [menu,setMenu]=useState(false);const [offline,setOffline]=useState(!navigator.onLine);const [update,setUpdate]=useState(false);
+  const [menu,setMenu]=useState(false);const [offline,setOffline]=useState(!navigator.onLine);
   const [windowWidth,setWindowWidth]=useState(window.innerWidth);
   const [sidebarCollapsed,setSidebarCollapsed]=useState(()=>{try{return localStorage.getItem('study-notes-sidebar-collapsed')==='true';}catch{return false;}});
   const drag=useRef<string|undefined>(undefined);const modal=useRef<HTMLDialogElement>(null);const lastFocus=useRef<HTMLElement|null>(null);
@@ -38,7 +38,7 @@ export function App(){
   useEffect(()=>{const resize=()=>setWindowWidth(window.innerWidth);window.addEventListener('resize',resize);return()=>window.removeEventListener('resize',resize);},[]);
   useEffect(()=>{try{localStorage.setItem('study-notes-sidebar-collapsed',String(sidebarCollapsed));}catch{/* 表示切替は保存不可でも使える */}},[sidebarCollapsed]);
   useEffect(()=>{document.documentElement.dataset.theme=settings?.theme??'light';},[settings?.theme]);
-  useEffect(()=>{const on=()=>setOffline(!navigator.onLine);const changed=()=>setUpdate(true);window.addEventListener('online',on);window.addEventListener('offline',on);window.addEventListener('app-update',changed);return()=>{window.removeEventListener('online',on);window.removeEventListener('offline',on);window.removeEventListener('app-update',changed);};},[]);
+  useEffect(()=>{const on=()=>setOffline(!navigator.onLine);window.addEventListener('online',on);window.addEventListener('offline',on);return()=>{window.removeEventListener('online',on);window.removeEventListener('offline',on);};},[]);
   useEffect(()=>{if(editor){lastFocus.current=document.activeElement as HTMLElement;modal.current?.showModal();}else{modal.current?.close();lastFocus.current?.focus();}},[editor]);
   async function run(action:()=>Promise<unknown>){setError('');setBusy(true);try{await action();setEditor(undefined);}catch(e){setError(e instanceof Error?e.message:'保存できませんでした。ブラウザの保存容量を確認してください。');}finally{setBusy(false);}}
   function pick(id?:string){void flushAllStrokes().then(()=>{setSelected(id);setOpened(undefined);setPageRequest(undefined);setMenu(false);setError('');}).catch(()=>setError('書き込みを保存できませんでした。画面の切り替えを中止しました。'));}
@@ -58,13 +58,13 @@ export function App(){
       <nav aria-label="科目一覧">{subjects?.map(s=><button key={s.id} className={`subject-nav ${selected===s.id?'selected':''}`} style={{'--accent':s.color} as CSSProperties} onClick={()=>pick(s.id)}><span>{s.icon}</span><span className="truncate">{s.name}</span><span className="count">{allNotes?.filter(n=>n.subjectId===s.id).length??0}</span></button>)}</nav>
       {subjects?.length===0&&<p className="sidebar-hint">科目を追加して、授業ごとに<br/>ノートを整理しましょう。</p>}
       <button className="add-subject" onClick={()=>setEditor({kind:'subject'})}>＋ 科目を追加</button>
-      <div className="sidebar-footer"><div className="local-info"><span>◉</span><div>このブラウザに保存<small>{offline?'オフラインで利用中':'データは外部に送信しません'}</small></div></div><button className="theme-button" onClick={()=>run(()=>db.settings.put({id:'main',maskColor:settings?.maskColor??'#ef4444',promptTemplate:settings?.promptTemplate??'',penPresets:settings?.penPresets??[],lastExportAt:settings?.lastExportAt,theme:settings?.theme==='dark'?'light':'dark'}))}>{settings?.theme==='dark'?'☀ ライトモード':'☾ ダークモード'}</button></div>
+      <div className="sidebar-footer"><UpdatePanel/><div className="local-info"><span>◉</span><div>このブラウザに保存<small>{offline?'オフラインで利用中':'データは外部に送信しません'}</small></div></div><button className="theme-button" onClick={()=>run(()=>db.settings.put({id:'main',maskColor:settings?.maskColor??'#ef4444',promptTemplate:settings?.promptTemplate??'',penPresets:settings?.penPresets??[],lastExportAt:settings?.lastExportAt,theme:settings?.theme==='dark'?'light':'dark'}))}>{settings?.theme==='dark'?'☀ ライトモード':'☾ ダークモード'}</button></div>
     </aside>
     <main>
       <header className="topbar"><button className="mobile-toggle icon-button" aria-label={sidebarVisible?'科目メニューを隠す':'科目メニューを開く'} aria-expanded={sidebarVisible} aria-controls="subject-sidebar" onClick={()=>{if(overlayMenu)setMenu(v=>!v);else setSidebarCollapsed(v=>!v);}}>☰</button><div className="breadcrumb"><button onClick={()=>pick()}>学習ノート</button><span>/</span><span>{subject?.name??'ノート一覧'}</span>{activeNote&&<><span>/</span><span className="truncate">第{activeNote.sessionNumber}回</span></>}</div><span className="storage-label">{offline?'オフライン':'ブラウザ内保存'}</span></header>
       <div className={activeNote?"content editing-pdf":"content"} style={{'--accent':subject?.color??'#2563eb'} as CSSProperties}>
         {error&&<div role="alert" className="error">{error}<button onClick={()=>setError('')}>閉じる</button></div>}
-        {update&&<div className="notice">新しいバージョンがあります。入力を終えてから再読み込みしてください。<button onClick={()=>void flushAllStrokes().then(()=>applyUpdate(true)).catch(()=>setError('書き込みを保存できませんでした。更新を中止しました。'))}>再読み込み</button></div>}
+        <UpdateNotice/>
         {!subjects||!allNotes?<p role="status">ノートを読み込んでいます…</p>:subject?<>
           {!activeNote&&<div className="page-heading"><div><div className="eyebrow">科目ノート</div><h1><span>{subject.icon}</span> {subject.name}</h1><p>{notes.length}件の授業</p></div><div className="heading-actions"><button className="secondary" onClick={()=>setEditor({kind:'subject',value:subject})}>科目を編集</button><button className="primary" onClick={()=>setEditor({kind:'note'})}>＋ 授業を追加</button></div></div>}
           {activeNote?<><button className="back-link" onClick={()=>void flushAllStrokes().then(()=>setOpened(undefined)).catch(()=>setError('書き込みを保存できませんでした。'))}>授業一覧に戻る</button><section className="note-detail"><div className="detail-heading"><div><span className="session-badge">第{activeNote.sessionNumber}回</span><h2>{activeNote.title}</h2><p>{activeNote.date?formatDate(activeNote.date):'授業日未設定'}</p></div><button className="secondary" onClick={()=>setEditor({kind:'note',value:activeNote})}>編集</button></div><LessonWorkspace key={activeNote.id} noteId={activeNote.id} request={pageRequest}/></section></>:<>

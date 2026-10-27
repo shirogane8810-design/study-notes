@@ -17,3 +17,4 @@
 @media(pointer:coarse){.pdf-toolbar .tool-group button,.immersive-tools-toggle,.pdf-filebar>button,.pdf-filebar select,.material-list button{min-height:44px;min-width:44px}.pdf-resize-boundary{min-height:44px}}
 .pdf-editor.tools-expanded .pdf-toolbar>.tool-group{display:flex}
 .pdf-editor>.immersive-tools-toggle{display:block}
+.tool-line .draft{cursor:crosshair}

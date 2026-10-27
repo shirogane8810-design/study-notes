@@ -3,7 +3,8 @@ import type {PDFDocumentProxy,RenderTask} from 'pdfjs-dist';
 import type {Stroke,PageRef} from '../../db/models';
 import {paperLines} from './pages';
 import {normalizePoint,rotatePoint,hitStroke,pressureWidth,type Change,type Point,type Rotation} from './geometry';
-export type Tool='pen'|'highlighter'|'eraser'|'hand'|'text'|'lasso';
+import {straightLinePoints} from './straight-line';
+export type Tool='pen'|'line'|'highlighter'|'eraser'|'hand'|'text'|'lasso';
 interface Props { pageRef:PageRef;pdf:PDFDocumentProxy;docId:string;index:number;width:number;height:number;rotation:Rotation;active:boolean;strokes:Stroke[];tool:Tool;color:string;brushWidth:number;fingerDraw:boolean;onChange:(change:Change)=>void;onErase:(ids:string[])=>void;onPreview:(stroke:Stroke)=>void;onActivity:(active:boolean,kind?:string)=>void;cancelTouch:number;canDrawTouch:()=>boolean;onDiscard:(id:string)=>void }
 export function paint(canvas:HTMLCanvasElement,strokes:Stroke[],width:number,height:number,rotation:Rotation){
   const ratio=Math.min(window.devicePixelRatio||1,2,Math.sqrt(4000000/(width*height)));
@@ -26,6 +27,7 @@ export function InkPage(props:Props){
   const pdfCanvas=useRef<HTMLCanvasElement>(null),penCanvas=useRef<HTMLCanvasElement>(null),highlightCanvas=useRef<HTMLCanvasElement>(null),draftCanvas=useRef<HTMLCanvasElement>(null);
   const latest=useRef(props);latest.current=props;const draft=useRef<Stroke|null>(null);const pointer=useRef<number|null>(null);const erased=useRef(new Map<string,Stroke>());const frame=useRef(0);const pointerKind=useRef('');
   const [draftTool,setDraftTool]=useState<'pen'|'highlighter'>('pen');const [renderError,setRenderError]=useState('');
+  const drawingLine=useRef(false);
   useEffect(()=>{setRenderError('');let disposed=false;let task:RenderTask|undefined;let renderedPage:Awaited<ReturnType<PDFDocumentProxy['getPage']>>|undefined;
     void (async()=>{try{if(pageRef.kind!=='pdf'){const canvas=pdfCanvas.current;if(!canvas)return;const cw=rotation===90||rotation===270?height:width,ch=rotation===90||rotation===270?width:height;canvas.width=Math.round(width);canvas.height=Math.round(height);const ctx=canvas.getContext('2d');if(!ctx)return;ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);ctx.strokeStyle='#cbd5e1';ctx.lineWidth=.6;for(const line of paperLines(pageRef.kind,cw/(cw/595),ch/(cw/595))){const a=rotatePoint([line.x1/595,line.y1/(ch/(cw/595)),.5],rotation),b=rotatePoint([line.x2/595,line.y2/(ch/(cw/595)),.5],rotation);ctx.beginPath();ctx.moveTo(a[0]*width,a[1]*height);ctx.lineTo(b[0]*width,b[1]*height);ctx.stroke();}return;}const page=await pdf.getPage(pageRef.srcPage);renderedPage=page;if(disposed)return;const view=page.getViewport({scale:1,rotation:(page.rotate+rotation)%360});
       const scale=width/view.width;const viewport=page.getViewport({scale,rotation:(page.rotate+rotation)%360});const ratio=Math.min(active?(window.devicePixelRatio||1):1,2,Math.sqrt(6000000/(width*height)));
@@ -42,11 +44,13 @@ export function InkPage(props:Props){
   function down(e:ReactPointerEvent<HTMLCanvasElement>){const p=latest.current;
     if(p.tool==='lasso'||p.tool==='text'||p.tool==='hand'||(e.pointerType==='touch'&&(!p.fingerDraw||!p.canDrawTouch()))||e.button!==0||pointer.current!==null)return;
     e.preventDefault();e.stopPropagation();e.currentTarget.setPointerCapture(e.pointerId);pointer.current=e.pointerId;pointerKind.current=e.pointerType;p.onActivity(true,e.pointerType);erased.current.clear();
-    const v=point(e.nativeEvent,e.currentTarget);if(p.tool==='eraser')erase(v);else{setDraftTool(p.tool);draft.current={id:crypto.randomUUID(),pdfDocId:p.docId,pageIndex:p.index,tool:p.tool,color:p.color,width:p.brushWidth/595,points:[v],createdAt:Date.now()};renderDraft();}
+    const v=point(e.nativeEvent,e.currentTarget);drawingLine.current=p.tool==='line';if(p.tool==='eraser')erase(v);else{const storedTool=p.tool==='line'?'pen':p.tool;setDraftTool(storedTool);draft.current={id:crypto.randomUUID(),pdfDocId:p.docId,pageIndex:p.index,tool:storedTool,color:p.color,width:p.brushWidth/595,points:drawingLine.current?straightLinePoints(v,v,p.width,p.height):[v],createdAt:Date.now()};renderDraft();}
   }
+  function updateLine(e:PointerEvent,element:HTMLElement){const stroke=draft.current,p=latest.current;if(!stroke)return;const turned=p.rotation===90||p.rotation===270;stroke.points=straightLinePoints(stroke.points[0],point(e,element),turned?p.height:p.width,turned?p.width:p.height,e.shiftKey);}
   function move(e:ReactPointerEvent<HTMLCanvasElement>){if(pointer.current!==e.pointerId)return;e.preventDefault();e.stopPropagation();
     const events=typeof e.nativeEvent.getCoalescedEvents==='function'?e.nativeEvent.getCoalescedEvents():[];
-    for(const event of events.length?events:[e.nativeEvent]){const p=point(event,e.currentTarget);if(draft.current){const previous=draft.current.points.at(-1);if(!previous||Math.hypot(p[0]-previous[0],p[1]-previous[1])>.0001)draft.current.points.push(p);}else erase(p);}
+    if(drawingLine.current&&draft.current)updateLine(e.nativeEvent,e.currentTarget);
+    else for(const event of events.length?events:[e.nativeEvent]){const p=point(event,e.currentTarget);if(draft.current){const previous=draft.current.points.at(-1);if(!previous||Math.hypot(p[0]-previous[0],p[1]-previous[1])>.0001)draft.current.points.push(p);}else erase(p);}
     if(draft.current)latest.current.onPreview({...draft.current,points:[...draft.current.points]});renderDraft();
   }
   function finish(){if(pointer.current===null)return;const p=latest.current;const stroke=draft.current;draft.current=null;pointer.current=null;
@@ -58,7 +62,7 @@ export function InkPage(props:Props){
     <canvas ref={pdfCanvas} className="pdf-background" aria-label={`PDF ${index+1}ページ`}/>
     <canvas ref={highlightCanvas} className="ink-layer highlights" aria-hidden="true"/>
     <canvas ref={penCanvas} className="ink-layer" aria-hidden="true"/>
-    <canvas ref={draftCanvas} className={`ink-layer draft ${draftTool==='highlighter'?'highlights':''}`} aria-label={`${index+1}ページの手書き領域`} onPointerDown={down} onPointerMove={move} onPointerUp={e=>{if(pointer.current===e.pointerId){e.preventDefault();e.stopPropagation();finish();}}} onPointerCancel={finish} onLostPointerCapture={finish}/>
+    <canvas ref={draftCanvas} className={`ink-layer draft ${draftTool==='highlighter'?'highlights':''}`} aria-label={`${index+1}ページの手書き領域`} onPointerDown={down} onPointerMove={move} onPointerUp={e=>{if(pointer.current===e.pointerId){e.preventDefault();e.stopPropagation();if(drawingLine.current&&draft.current)updateLine(e.nativeEvent,e.currentTarget);finish();}}} onPointerCancel={finish} onLostPointerCapture={finish}/>
     {renderError&&<p role="alert" className="pdf-render-error">{renderError}</p>}
   </div>;
 }

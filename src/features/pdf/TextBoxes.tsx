@@ -4,7 +4,7 @@ import {db} from '../../db/database';
 import type {TextBox} from '../../db/models';
 import {TextBoxWriter} from './autosave';
 import {transformTextBox,type Corner} from './text-box-geometry';
-import {answerAt,fitAnswer,textAt,isTextDrag} from './answer-input';
+import {answerAt,fitAnswer,textAt,isTextDrag,answerLines} from './answer-input';
 import {normalizePoint,type Rotation} from './geometry';
 import {textChanged} from './edit-history';
 
@@ -25,7 +25,7 @@ export function TextBoxes({historyRevision,onTextChange,docId,pageIndex,width,he
   const canonicalW=rotation===90||rotation===270?height:width,canonicalH=rotation===90||rotation===270?width:height;
   const transform=rotation===90?`translate(${width}px,0) rotate(90deg)`:rotation===180?`translate(${width}px,${height}px) rotate(180deg)`:rotation===270?`translate(0,${height}px) rotate(270deg)`:'none';
   function save(box:TextBox){track(box.id,box);setDrafts(v=>({...v,[box.id]:box}));writer.queue(box);}
-  function resizeAnswer(box:TextBox,text=box.text){const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');if(ctx)ctx.font=`${box.fontSize*canonicalW}px system-ui,sans-serif`;return fitAnswer(box,text,canonicalW/canonicalH,ctx?ctx.measureText(text.replace(/[\r\n]+/g,' ')).width/canonicalW:undefined);}
+  function resizeAnswer(box:TextBox,text=box.text){const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');if(ctx)ctx.font=`${box.fontSize*canonicalW}px system-ui,sans-serif`;return fitAnswer(box,text,canonicalW/canonicalH,ctx?Math.max(...answerLines(text).map(line=>ctx.measureText(line).width))/canonicalW:undefined);}
   function changeSize(box:TextBox,size:number){const next={...box,fontSize:size};save(box.kind==='answer'?resizeAnswer(next):next);commit();if(box.kind==='answer')onAnswerFont?.(Math.round(size*595));}
   function finishAnswer(element:HTMLTextAreaElement,id:string){commit();void writer.flush().then(()=>{setSelected(current=>current===id?undefined:current);element.blur();}).catch(()=>{});}
   function insertion(x:number,y:number):TextBox{const box:TextBox={id:crypto.randomUUID(),pdfDocId:docId,pageIndex,x,y,width:.32,height:.12,text:'',color:quick?'#2563eb':'#172033',fontSize:(quick?answerFont:16)/595};return quick?answerAt(box,x,y,canonicalW/canonicalH):textAt(box,x,y,canonicalW,canonicalH);}
@@ -43,6 +43,7 @@ export function TextBoxes({historyRevision,onTextChange,docId,pageIndex,width,he
         {(!quick?['n','e','s','w','nw','ne','sw','se'] as const:[]).map(handle=><div key={handle} role="button" aria-label={`テキスト枠${handle.length===2?'の角でサイズ変更':'線で移動'} ${handle}`} className={`text-frame-handle handle-${handle}`} onPointerDown={e=>{e.preventDefault();e.stopPropagation();e.currentTarget.setPointerCapture(e.pointerId);commit();drag.current={box,x:e.clientX,y:e.clientY,pointerId:e.pointerId,corner:handle.length===2?handle as Corner:undefined};}} onPointerMove={e=>{const start=drag.current;if(!start||start.pointerId!==e.pointerId||!layer.current)return;e.preventDefault();e.stopPropagation();const rect=layer.current.getBoundingClientRect();const a=normalizePoint(start.x,start.y,rect,.5,rotation),b=normalizePoint(e.clientX,e.clientY,rect,.5,rotation);save(transformTextBox(start.box,b[0]-a[0],b[1]-a[1],start.corner));}} onPointerUp={()=>{drag.current=undefined;commit();void writer.flush().catch(()=>{});}} onPointerCancel={()=>{drag.current=undefined;commit();void writer.flush().catch(()=>{});}} onLostPointerCapture={()=>{drag.current=undefined;commit();void writer.flush().catch(()=>{});}}/>)}
         <textarea aria-label={`${pageIndex+1}ページのテキストボックス`} autoFocus={selected===box.id} onFocus={()=>setSelected(box.id)} onCompositionStart={()=>{enter.current=undefined;}} onPointerDown={()=>{enter.current=undefined;}} onKeyDown={e=>{
           if(e.nativeEvent.isComposing||e.nativeEvent.keyCode===229){enter.current=undefined;return;}
+          if(e.key==='Enter'&&e.shiftKey){enter.current=undefined;return;}
           if(quick){if(e.altKey&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();save(transformTextBox(box,e.key==='ArrowLeft'?-1/595:e.key==='ArrowRight'?1/595:0,e.key==='ArrowUp'?-1/842:e.key==='ArrowDown'?1/842:0));return;}if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();finishAnswer(e.currentTarget,box.id);return;}if(e.key==='Escape'){e.preventDefault();finishAnswer(e.currentTarget,box.id);onFinish();return;}}
 
           if(e.key!=='Enter'||e.shiftKey){enter.current=undefined;return;}if(e.repeat){e.preventDefault();return;}
